@@ -121,10 +121,13 @@
   const COLOR_BG = '#8fac5c';
   const COLOR_FG = '#33430f';
 
+  const WORD = ['T', 'O', 'U', 'C', 'H', 'I'];
+
   let best = Number(localStorage.getItem('snakeBest') || 0);
   bestEl.textContent = 'BEST: ' + best;
 
   let snake, dir, nextDir, food, score, running, paused, tickMs, timer;
+  let won, winRaf, winStart;
 
   function reset() {
     snake = [
@@ -138,6 +141,8 @@
     tickMs = 140;
     running = false;
     paused = false;
+    won = false;
+    if (winRaf) cancelAnimationFrame(winRaf);
     placeFood();
     scoreEl.textContent = 'SCORE: 0';
     msgEl.textContent = 'Press any arrow key to start';
@@ -166,11 +171,42 @@
     // food
     ctx.fillRect(food.x * cell + 2, food.y * cell + 2, cell - 4, cell - 4);
 
-    // snake
+    // snake spells the word, letter per segment, head first
+    ctx.font = `bold ${cell * 0.8}px 'Courier New', monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
     snake.forEach((seg, i) => {
-      const pad = i === 0 ? 1 : 1.5;
-      ctx.fillRect(seg.x * cell + pad, seg.y * cell + pad, cell - pad * 2, cell - pad * 2);
+      const cx = seg.x * cell + cell / 2;
+      const cy = seg.y * cell + cell / 2;
+      const letter = WORD[i] || '';
+      ctx.fillText(letter, cx, cy + 1);
     });
+  }
+
+  function drawHeart(cx, cy, size) {
+    ctx.beginPath();
+    const topCurveHeight = size * 0.3;
+    ctx.moveTo(cx, cy + topCurveHeight);
+    ctx.bezierCurveTo(cx, cy, cx - size / 2, cy, cx - size / 2, cy + topCurveHeight);
+    ctx.bezierCurveTo(cx - size / 2, cy + (size + topCurveHeight) / 2, cx, cy + (size + topCurveHeight) / 2, cx, cy + size);
+    ctx.bezierCurveTo(cx, cy + (size + topCurveHeight) / 2, cx + size / 2, cy + (size + topCurveHeight) / 2, cx + size / 2, cy + topCurveHeight);
+    ctx.bezierCurveTo(cx + size / 2, cy, cx, cy, cx, cy + topCurveHeight);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  function drawWin(t) {
+    ctx.fillStyle = COLOR_BG;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    const pulse = 1 + Math.sin(t / 260) * 0.12;
+    ctx.fillStyle = COLOR_FG;
+    drawHeart(canvas.width / 2, canvas.height / 2 - 30, 70 * pulse);
+
+    ctx.font = `bold ${cell * 0.7}px 'Courier New', monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(WORD.join(''), canvas.width / 2, canvas.height / 2 + 70);
   }
 
   function step() {
@@ -187,16 +223,36 @@
     if (head.x === food.x && head.y === food.y) {
       score += 10;
       scoreEl.textContent = 'SCORE: ' + score;
-      placeFood();
-      if (tickMs > 60 && score % 50 === 0) {
-        tickMs -= 6;
-        restartTimer();
+
+      if (snake.length >= WORD.length) {
+        return winGame();
       }
+
+      placeFood();
     } else {
       snake.pop();
     }
 
     draw();
+  }
+
+  function winGame() {
+    running = false;
+    clearInterval(timer);
+    if (score > best) {
+      best = score;
+      localStorage.setItem('snakeBest', best);
+      bestEl.textContent = 'BEST: ' + best;
+    }
+    won = true;
+    msgEl.textContent = 'You spelled ' + WORD.join('') + '! Press any arrow key to play again';
+    winStart = performance.now();
+    const animate = (t) => {
+      if (!won) return;
+      drawWin(t - winStart);
+      winRaf = requestAnimationFrame(animate);
+    };
+    winRaf = requestAnimationFrame(animate);
   }
 
   function gameOver() {
