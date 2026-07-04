@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Snake</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #2b2b2b;
+    font-family: 'Courier New', monospace;
+  }
+  .phone {
+    background: #3a3a3a;
+    border-radius: 24px;
+    padding: 24px;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05);
+    width: 380px;
+  }
+  .screen-frame {
+    background: #1c1c1c;
+    border-radius: 8px;
+    padding: 14px;
+    box-shadow: inset 0 2px 8px rgba(0,0,0,0.6);
+  }
+  .hud {
+    display: flex;
+    justify-content: space-between;
+    color: #9be564;
+    background: #8fac5c;
+    padding: 4px 8px;
+    font-size: 13px;
+    font-weight: bold;
+    letter-spacing: 1px;
+    border-radius: 2px 2px 0 0;
+  }
+  #board {
+    display: block;
+    background: #8fac5c;
+    image-rendering: pixelated;
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    border-radius: 0 0 2px 2px;
+  }
+  .msg {
+    text-align: center;
+    color: #33430f;
+    background: #8fac5c;
+    font-size: 12px;
+    padding: 4px 0 8px;
+    min-height: 16px;
+    letter-spacing: 0.5px;
+  }
+  .controls {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(2, 1fr);
+    gap: 8px;
+    margin-top: 18px;
+  }
+  .controls button {
+    background: #4a4a4a;
+    border: none;
+    border-radius: 8px;
+    color: #ccc;
+    padding: 14px 0;
+    font-size: 18px;
+    box-shadow: 0 3px 0 #222;
+  }
+  .controls button:active {
+    box-shadow: 0 1px 0 #222;
+    transform: translateY(2px);
+  }
+  #up { grid-column: 2; grid-row: 1; }
+  #left { grid-column: 1; grid-row: 2; }
+  #down { grid-column: 2; grid-row: 2; }
+  #right { grid-column: 3; grid-row: 2; }
+  .hint {
+    text-align: center;
+    color: #888;
+    font-size: 11px;
+    margin-top: 10px;
+  }
+</style>
+</head>
+<body>
+  <div class="phone">
+    <div class="screen-frame">
+      <div class="hud">
+        <span id="score">SCORE: 0</span>
+        <span id="best">BEST: 0</span>
+      </div>
+      <canvas id="board" width="240" height="240"></canvas>
+      <div class="msg" id="msg">Press any arrow key to start</div>
+    </div>
+    <div class="controls">
+      <button id="up">▲</button>
+      <button id="left">◀</button>
+      <button id="down">▼</button>
+      <button id="right">▶</button>
+    </div>
+    <div class="hint">Arrow keys / WASD to move · Space to pause</div>
+  </div>
+
+<script>
+(() => {
+  const GRID = 20;
+  const canvas = document.getElementById('board');
+  const ctx = canvas.getContext('2d');
+  const cell = canvas.width / GRID;
+
+  const scoreEl = document.getElementById('score');
+  const bestEl = document.getElementById('best');
+  const msgEl = document.getElementById('msg');
+
+  const COLOR_BG = '#8fac5c';
+  const COLOR_FG = '#33430f';
+
+  let best = Number(localStorage.getItem('snakeBest') || 0);
+  bestEl.textContent = 'BEST: ' + best;
+
+  let snake, dir, nextDir, food, score, running, paused, tickMs, timer;
+
+  function reset() {
+    snake = [
+      { x: 10, y: 10 },
+      { x: 9, y: 10 },
+      { x: 8, y: 10 },
+    ];
+    dir = { x: 1, y: 0 };
+    nextDir = dir;
+    score = 0;
+    tickMs = 140;
+    running = false;
+    paused = false;
+    placeFood();
+    scoreEl.textContent = 'SCORE: 0';
+    msgEl.textContent = 'Press any arrow key to start';
+    draw();
+  }
+
+  function placeFood() {
+    let valid = false;
+    while (!valid) {
+      food = { x: Math.floor(Math.random() * GRID), y: Math.floor(Math.random() * GRID) };
+      valid = !snake.some(s => s.x === food.x && s.y === food.y);
+    }
+  }
+
+  function draw() {
+    ctx.fillStyle = COLOR_BG;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.fillStyle = COLOR_FG;
+    ctx.globalAlpha = 0.35;
+    for (let x = food.x - 1; x <= food.x + 1; x++) {
+      // subtle grid dots skipped for perf/simplicity
+    }
+    ctx.globalAlpha = 1;
+
+    // food
+    ctx.fillRect(food.x * cell + 2, food.y * cell + 2, cell - 4, cell - 4);
+
+    // snake
+    snake.forEach((seg, i) => {
+      const pad = i === 0 ? 1 : 1.5;
+      ctx.fillRect(seg.x * cell + pad, seg.y * cell + pad, cell - pad * 2, cell - pad * 2);
+    });
+  }
+
+  function step() {
+    if (paused) return;
+    dir = nextDir;
+    const head = { x: snake[0].x + dir.x, y: snake[0].y + dir.y };
+
+    if (head.x < 0 || head.y < 0 || head.x >= GRID || head.y >= GRID || snake.some(s => s.x === head.x && s.y === head.y)) {
+      return gameOver();
+    }
+
+    snake.unshift(head);
+
+    if (head.x === food.x && head.y === food.y) {
+      score += 10;
+      scoreEl.textContent = 'SCORE: ' + score;
+      placeFood();
+      if (tickMs > 60 && score % 50 === 0) {
+        tickMs -= 6;
+        restartTimer();
+      }
+    } else {
+      snake.pop();
+    }
+
+    draw();
+  }
+
+  function gameOver() {
+    running = false;
+    clearInterval(timer);
+    if (score > best) {
+      best = score;
+      localStorage.setItem('snakeBest', best);
+      bestEl.textContent = 'BEST: ' + best;
+    }
+    msgEl.textContent = 'Game over — press arrow key to retry';
+  }
+
+  function restartTimer() {
+    clearInterval(timer);
+    timer = setInterval(step, tickMs);
+  }
+
+  function start() {
+    if (running) return;
+    if (!snake) reset();
+    running = true;
+    paused = false;
+    msgEl.textContent = '';
+    restartTimer();
+  }
+
+  function setDir(x, y) {
+    if (!running) {
+      reset();
+      start();
+    }
+    // prevent reversing directly into itself
+    if (dir.x === -x && dir.y === -y) return;
+    nextDir = { x, y };
+  }
+
+  function togglePause() {
+    if (!running) return;
+    paused = !paused;
+    msgEl.textContent = paused ? 'Paused' : '';
+  }
+
+  const keyMap = {
+    ArrowUp: [0, -1], KeyW: [0, -1],
+    ArrowDown: [0, 1], KeyS: [0, 1],
+    ArrowLeft: [-1, 0], KeyA: [-1, 0],
+    ArrowRight: [1, 0], KeyD: [1, 0],
+  };
+
+  window.addEventListener('keydown', e => {
+    if (e.code === 'Space') { e.preventDefault(); togglePause(); return; }
+    const m = keyMap[e.code];
+    if (m) { e.preventDefault(); setDir(m[0], m[1]); }
+  });
+
+  document.getElementById('up').addEventListener('click', () => setDir(0, -1));
+  document.getElementById('down').addEventListener('click', () => setDir(0, 1));
+  document.getElementById('left').addEventListener('click', () => setDir(-1, 0));
+  document.getElementById('right').addEventListener('click', () => setDir(1, 0));
+
+  // simple swipe support
+  let touchStart = null;
+  canvas.addEventListener('touchstart', e => {
+    touchStart = e.touches[0];
+  }, { passive: true });
+  canvas.addEventListener('touchend', e => {
+    if (!touchStart) return;
+    const dx = e.changedTouches[0].clientX - touchStart.clientX;
+    const dy = e.changedTouches[0].clientY - touchStart.clientY;
+    if (Math.abs(dx) > Math.abs(dy)) {
+      setDir(dx > 0 ? 1 : -1, 0);
+    } else {
+      setDir(0, dy > 0 ? 1 : -1);
+    }
+    touchStart = null;
+  }, { passive: true });
+
+  reset();
+})();
+</script>
+</body>
+</html>
